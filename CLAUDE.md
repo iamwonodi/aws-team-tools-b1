@@ -10,6 +10,10 @@ The team's own tools (DbGate, CloudBeaver) on core's platform. A blueprint: noth
 - No password is stored anywhere: DbGate `askUser`, CloudBeaver saves none. The CloudBeaver administrator is random per start, root-only on the server.
 - The start-up script must stay under EC2's 16 KB of user data (the module refuses more); large files (the RDS bundle) are downloaded and checked, never embedded.
 
+## Environments
+
+The tools run in the environments listed in `.github/environments.json` (any of development, staging, production; only ones core runs). Anything that acts on an environment asks `scripts/ci/enabled-environments.sh`; never assume all three exist.
+
 ## Checks before a commit
 
 ```bash

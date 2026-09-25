@@ -14,3 +14,4 @@
 | DocumentDB's `retryWrites=false` is passed in DbGate's port field | DbGate passes no driver options but pastes the port into the connection string; DocumentDB refuses retryable writes |
 | CloudBeaver's administrator is random per start, root-only | Without one its setup page makes the first visitor the administrator; connections are prepared, so nobody needs it day to day |
 | Target groups get AWS-generated names from a prefix | A name is at most 32 characters, which a long project name would exceed; core scopes target groups by tag |
+| The tools run only in the environments listed in `.github/environments.json`; deploys skip one not listed without holding up the next | A project may run one, two or three environments. A fixed chain (development, then staging, then production) would never reach production without staging |

@@ -1,8 +1,10 @@
 name: Deploy
 
-# Applies the team tools on merge: development, then staging, then production,
-# each under its GitHub Environment (reviewers, main only) and each after the
-# one before succeeds. Each plans first and applies that plan.
+# Applies the team tools on merge to the environments listed in
+# .github/environments.json, in order (development, staging, production), each
+# under its GitHub Environment (reviewers, main only). An environment not listed
+# is skipped without holding up the next; one that fails stops those after it.
+# Each plans first and applies that plan.
 #
 # A running tools server keeps its old configuration until its next start
 # (they are replaced at every start); the Start tools workflow starts one now.
@@ -16,6 +18,7 @@ on:
       - "modules/**"
       - "tools/**"
       - ".terraform-version"
+      - ".github/environments.json"
   workflow_dispatch:
 
 permissions:
@@ -28,8 +31,26 @@ concurrency:
 
 jobs:
 
+  environments:
+    name: Environments
+    runs-on: ubuntu-latest
+    outputs:
+      list: ${{ steps.read.outputs.list }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Read The Environments The Tools Run In
+        id: read
+        run: echo "list=$(bash scripts/ci/enabled-environments.sh)" >> "${GITHUB_OUTPUT}"
+
+  # In order, each only if listed. One not listed is skipped and the next still
+  # runs; one that fails stops those after it.
+
   development:
     name: Deploy (development)
+    needs: environments
+    if: contains(fromJson(needs.environments.outputs.list), 'development')
     uses: ./.github/workflows/deploy-environment.yml
     with:
       environment: development
@@ -37,7 +58,11 @@ jobs:
 
   staging:
     name: Deploy (staging)
-    needs: development
+    needs: [environments, development]
+    if: >-
+      always() && needs.environments.result == 'success'
+      && contains(fromJson(needs.environments.outputs.list), 'staging')
+      && contains(fromJson('["success", "skipped"]'), needs.development.result)
     uses: ./.github/workflows/deploy-environment.yml
     with:
       environment: staging
@@ -45,7 +70,12 @@ jobs:
 
   production:
     name: Deploy (production)
-    needs: staging
+    needs: [environments, development, staging]
+    if: >-
+      always() && needs.environments.result == 'success'
+      && contains(fromJson(needs.environments.outputs.list), 'production')
+      && contains(fromJson('["success", "skipped"]'), needs.development.result)
+      && contains(fromJson('["success", "skipped"]'), needs.staging.result)
     uses: ./.github/workflows/deploy-environment.yml
     with:
       environment: production

@@ -15,13 +15,16 @@ set -euo pipefail
 # It needs no admin access to core: the file is a generated, non-secret list.
 #
 # Usage: scripts/fetch-role-arn.sh --core OWNER/CORE-REPO [--repo OWNER/REPO]
-#          [--environment development|staging|production]   (default: all three)
+#          [--environment development|staging|production]
+#          (default: every environment in .github/environments.json)
 # Needs: gh (authenticated), jq, base64.
 # ==============================================================================
 
 REPO_ROOT="${INIT_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 CORE="" REPO=""
-ENVIRONMENTS=(development staging production)
+# The environments the tools run in (.github/environments.json).
+mapfile -t ENVIRONMENTS < <(bash "${REPO_ROOT}/scripts/ci/enabled-environments.sh" | jq -r '.[]')
+[[ ${#ENVIRONMENTS[@]} -gt 0 ]] || exit 1
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -29,7 +32,9 @@ while [[ $# -gt 0 ]]; do
     --repo) REPO="${2:-}"; shift 2 ;;
     --environment)
       case "${2:-}" in
-        development|staging|production) ENVIRONMENTS=("$2") ;;
+        development|staging|production)
+          bash "${REPO_ROOT}/scripts/ci/enabled-environments.sh" --check "$2" || exit 1
+          ENVIRONMENTS=("$2") ;;
         *) echo "ERROR: --environment must be development, staging or production." >&2; exit 1 ;;
       esac
       shift 2 ;;

@@ -24,4 +24,9 @@ echo '{"service_role_arns":{"acme/team-tools":"not-an-arn"}}' > "${ARNS}"
 check "a malformed ARN is refused"                          bash -c "! run >/dev/null 2>&1"
 : > "${ARNS}"
 check "an unreadable core is reported"                      bash -c "! run >/dev/null 2>&1"
+echo '{"service_role_arns":{"acme/team-tools":"arn:aws:iam::123456789012:role/acme-team-tools"}}' > "${ARNS}"
+echo '["development","production"]' > "${WORK}/environments.json"
+ENVIRONMENTS_FILE="${WORK}/environments.json" run >/dev/null 2>&1
+check "by default, only the environments listed"            bash -c "grep -q 'role-arns/production.json' '${FAKE_GH_LOG}' && ! grep -q 'role-arns/staging.json' '${FAKE_GH_LOG}'"
+check "one not listed is refused by name"                   bash -c "! ENVIRONMENTS_FILE='${WORK}/environments.json' bash '$F' --core acme/core --repo acme/team-tools --environment staging >/dev/null 2>&1"
 finish

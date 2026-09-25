@@ -14,6 +14,10 @@ The team's own tools, on the platform built by core (`aws-core-infra-b1`): **DbG
         each person signs in to the database as themselves ◄─────────┘
 ```
 
+## Environments
+
+The tools run in any one, two or all three of development, staging and production, listed in `.github/environments.json` (`scripts/init-tools.sh --environments development,production`, say), and only where core runs. Plans, deploys and Start tools act only on those; the other folders stay, ignored. Deploys go in order, development, staging, production: one not listed is skipped, one that fails stops those after it.
+
 ## What it builds, per environment
 
 | | |
@@ -48,8 +52,8 @@ CloudBeaver Community has no MongoDB: use DbGate for MongoDB and DocumentDB.
 | Workflow | When | |
 | --- | --- | --- |
 | Tests | every pull request and push | shellcheck, script tests, format, lock files, validate, module tests |
-| Plan | pull requests | each environment, under `<environment>-plan` |
-| Deploy | merge to `main` | development, then staging, then production, each under its environment |
+| Plan | pull requests | each environment listed, under `<environment>-plan` |
+| Deploy | merge to `main` | the environments listed, in order, each under its environment |
 | Start tools | by hand | one environment, under its environment (same reviewers) |
 
 ## Checks

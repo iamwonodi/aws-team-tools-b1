@@ -8,7 +8,8 @@ export FAKE_GH_REPO_JSON='{"id":987,"owner":{"id":123}}'
 fresh(){
   rm -rf "${WORK}/repo"; mkdir -p "${WORK}/repo/scripts/ci" "${WORK}/repo/infrastructure"
   for e in development staging production; do cp -r "${SOURCE_ROOT}/infrastructure/$e" "${WORK}/repo/infrastructure/"; rm -rf "${WORK}/repo/infrastructure/$e/.terraform"; done
-  cp "${SCRIPTS}/ci/check-placeholders.sh" "${WORK}/repo/scripts/ci/"
+  cp "${SCRIPTS}/ci/check-placeholders.sh" "${SCRIPTS}/ci/enabled-environments.sh" "${WORK}/repo/scripts/ci/"
+  mkdir -p "${WORK}/repo/.github"; echo '["development","staging","production"]' > "${WORK}/repo/.github/environments.json"
   git -C "${WORK}/repo" init -q; git -C "${WORK}/repo" remote add origin https://github.com/acme/team-tools.git
   export INIT_REPO_ROOT="${WORK}/repo" FAKE_GH_LOG="${WORK}/gh.log"; : > "${FAKE_GH_LOG}"
 }
@@ -39,4 +40,13 @@ check "--skip-github writes the files only"                bash -c "grep -qx 'pr
 fresh
 check "a bad project is refused"                           bash -c "! bash '${INIT}' --project Acme --region af-south-1 >/dev/null 2>&1"
 check "a bad region is refused"                            bash -c "! bash '${INIT}' --project acme --region africa >/dev/null 2>&1"
+echo "== environments"
+fresh; run --environments production,development --reviewers alice > "${WORK}/out.txt" 2>&1; rc=$?
+check "--environments succeeds"                            test $rc -eq 0
+check "the list is written, in order"                      bash -c "[ \"\$(jq -c . '${WORK}/repo/.github/environments.json')\" = '[\"development\",\"production\"]' ]"
+check "staging's files are left alone"                     grep -q CHANGE_ME "$I/staging/terraform.tfvars"
+check "no GitHub Environment for staging"                  bash -c "! grep -q 'environments/staging' '${FAKE_GH_LOG}'"
+check "core's lines name only those environments"          grep -q 'run in (development production)' "${WORK}/out.txt"
+fresh
+check "an unknown --environments is refused"               bash -c "! bash '${INIT}' --project acme --region af-south-1 --environments prod >/dev/null 2>&1"
 finish

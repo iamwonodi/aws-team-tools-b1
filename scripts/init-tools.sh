@@ -24,9 +24,15 @@ set -euo pipefail
 #
 # Usage:
 #   scripts/init-tools.sh --project NAME --region REGION \
-#       [--reviewers login1,login2] [--repo OWNER/REPO] [--skip-github] [--dry-run]
+#       [--environments LIST] [--reviewers login1,login2] [--repo OWNER/REPO] \
+#       [--skip-github] [--dry-run]
 #
 #   --project   the project core was set up with (bucket names derive from it)
+#   --environments LIST
+#               the environments the tools run in: comma-separated, any of
+#               development, staging and production, and only ones core runs.
+#               Written to .github/environments.json; omitted, the current list
+#               is kept.
 #   --dry-run   show what would change; write and call nothing
 #
 # Needs: bash, sed, jq; gh (authenticated) unless --skip-github or --dry-run.
@@ -34,7 +40,7 @@ set -euo pipefail
 
 REPO_ROOT="${INIT_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 
-PROJECT="" REGION="" REVIEWERS="" REPO=""
+PROJECT="" REGION="" REVIEWERS="" REPO="" ENVIRONMENTS_ARG=""
 SKIP_GITHUB=false
 DRY_RUN=false
 
@@ -44,6 +50,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --project)     PROJECT="${2:-}"; shift 2 ;;
     --region)      REGION="${2:-}"; shift 2 ;;
+    --environments) ENVIRONMENTS_ARG="${2:-}"; shift 2 ;;
     --reviewers)   REVIEWERS="${2:-}"; shift 2 ;;
     --repo)        REPO="${2:-}"; shift 2 ;;
     --skip-github) SKIP_GITHUB=true; shift ;;
@@ -79,7 +86,24 @@ if [[ -z "${REPO}" && "${SKIP_GITHUB}" != "true" ]]; then
   REPO="$(sed -E 's#^(https?://[^/]+/|git@[^:]+:|ssh://[^/]+/)##; s#\.git$##; s#/$##' <<< "${REMOTE_URL}")"
 fi
 
-ENVIRONMENTS=(development staging production)
+ENABLED_FILE="${REPO_ROOT}/.github/environments.json"
+
+if [[ -n "${ENVIRONMENTS_ARG}" ]]; then
+  [[ "${ENVIRONMENTS_ARG}" =~ ^(development|staging|production)(,(development|staging|production))*$ ]] \
+    || { echo "ERROR: --environments must be a comma-separated list of development, staging and production." >&2; exit 1; }
+  # In the platform's order, each once.
+  ENVIRONMENTS_JSON="$(jq -cn --arg list "${ENVIRONMENTS_ARG}" \
+    '($list | split(",")) as $given | [("development","staging","production") | select(. as $e | $given | index($e))]')"
+else
+  [[ -f "${ENABLED_FILE}" ]] || { echo "ERROR: ${ENABLED_FILE} not found; pass --environments." >&2; exit 1; }
+  ENVIRONMENTS_JSON="$(ENVIRONMENTS_FILE="${ENABLED_FILE}" bash "${REPO_ROOT}/scripts/ci/enabled-environments.sh")"
+fi
+mapfile -t ENVIRONMENTS < <(jq -r '.[]' <<< "${ENVIRONMENTS_JSON}")
+
+echo "Environments: ${ENVIRONMENTS[*]} (each must be one core runs)"
+if [[ "${DRY_RUN}" != "true" ]]; then
+  jq -c '.' <<< "${ENVIRONMENTS_JSON}" > "${ENABLED_FILE}"
+fi
 
 # ------------------------------------------------------------------------------
 # Files
@@ -199,8 +223,8 @@ cat <<NEXT
 
 Done. Next:
 
-  1. In core, set these in EACH environment's terraform.tfvars (development,
-     staging, production) and let core apply them. They generate this
+  1. In core, set these in the terraform.tfvars of each environment the tools
+     run in (${ENVIRONMENTS[*]}) and let core apply them. They generate this
      repository's role in that account:
 
        team_tools_repository          = "${REPO:-OWNER/REPOSITORY}"

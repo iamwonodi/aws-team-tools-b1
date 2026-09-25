@@ -1,7 +1,8 @@
 name: Plan
 
-# Plans each environment on a pull request, under its <environment>-plan GitHub
-# Environment, so the pull request shows what merging will change.
+# Plans each environment the tools run in (.github/environments.json) on a pull
+# request, under its <environment>-plan GitHub Environment, so the pull request
+# shows what merging will change.
 
 on:
   pull_request:
@@ -12,6 +13,7 @@ on:
       - "modules/**"
       - "tools/**"
       - ".terraform-version"
+      - ".github/environments.json"
 
 permissions:
   id-token: write
@@ -23,6 +25,19 @@ concurrency:
 
 jobs:
 
+  environments:
+    name: Environments
+    runs-on: ubuntu-latest
+    outputs:
+      list: ${{ steps.read.outputs.list }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Read The Environments The Tools Run In
+        id: read
+        run: echo "list=$(bash scripts/ci/enabled-environments.sh)" >> "${GITHUB_OUTPUT}"
+
   plan:
     name: Plan (${{ matrix.environment }})
     runs-on: ubuntu-latest
@@ -30,10 +45,12 @@ jobs:
     # Never for a pull request from a fork: it must not assume the role.
     if: github.event.pull_request.head.repo.full_name == github.repository
 
+    needs: environments
+
     strategy:
       fail-fast: false
       matrix:
-        environment: [development, staging, production]
+        environment: ${{ fromJson(needs.environments.outputs.list) }}
 
     environment: ${{ matrix.environment }}-plan
 

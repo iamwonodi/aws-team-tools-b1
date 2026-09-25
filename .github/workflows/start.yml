@@ -29,6 +29,10 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v7
 
+      # Only an environment the tools run in (.github/environments.json).
+      - name: Check The Environment Is Enabled
+        run: bash scripts/ci/enabled-environments.sh --check "${{ inputs.environment }}"
+
       - name: Read Project
         run: |
           PROJECT_NAME="$(sed -n 's/^[[:space:]]*project_name[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "infrastructure/${{ inputs.environment }}/terraform.tfvars")"
