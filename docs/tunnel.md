@@ -2,8 +2,19 @@
 
 Production's tools have no web address. Reach them through a Session Manager port-forwarding tunnel, with your AWS sign-in.
 
-**You need:** the AWS CLI, the Session Manager plugin, and an AWS sign-in to the production account that may start a session on the tools server (IAM Identity Center; an administrator can too).
+**You need:** the AWS CLI, the Session Manager plugin, and a tunnel sign-in: you are listed for production in the identity repository (`aws-identity-b1`), which gives you the `TeamToolsTunnel` permission set in the production account. It can open a port-forwarding tunnel to the tools' server and nothing else.
 
+**Once, set up your sign-in** (you will need the access portal address, from whoever runs the identity repository):
+```bash
+aws configure sso --profile tools-production
+# SSO start URL:  the access portal address
+# SSO region:     the Region of IAM Identity Center
+# then choose the production account and the TeamToolsTunnel role
+```
+
+**Each time:**
+
+0. Sign in: `aws sso login --profile tools-production`, and add `--profile tools-production` to the commands below.
 1. Start the tools if they are off: the **Start tools** workflow, production.
 2. Find the server:
    ```bash
