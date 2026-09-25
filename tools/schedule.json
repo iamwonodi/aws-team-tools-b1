@@ -1,0 +1,5 @@
+{
+  "development": { "days": "MON-FRI", "start_hour": 8, "stop_hour": 19 },
+  "staging":     { "days": "SAT,SUN", "start_hour": 8, "stop_hour": 19 },
+  "production":  { "days": "MON-FRI", "start_hour": 8, "stop_hour": 19 }
+}

@@ -1,0 +1,22 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+tfplan
+tfplan.txt
+
+# Local build output of the module tests
+.terraform-build/
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store

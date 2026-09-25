@@ -1,0 +1,71 @@
+name: Tests
+
+# Everything that can be proven without AWS: the shell scripts, formatting, the
+# lock files, that every environment validates, and the module's mocked tests
+# against the real provider.
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+
+  scripts:
+    name: Scripts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Shellcheck
+        run: shellcheck -S warning scripts/*.sh scripts/ci/*.sh
+
+      - name: Script Tests
+        run: bash scripts/ci/tests/run-all.sh
+
+  terraform:
+    name: Terraform
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Read Terraform Version
+        run: echo "TF_VERSION=$(tr -d '[:space:]' < .terraform-version)" >> "${GITHUB_ENV}"
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Format Check
+        run: terraform fmt -check -recursive
+
+      - name: Provider Lock Files
+        run: |
+          for environment in development staging production; do
+            bash scripts/ci/check-lock-files.sh "infrastructure/${environment}"
+          done
+
+      - name: Validate Environments
+        run: |
+          for environment in development staging production; do
+            terraform -chdir="infrastructure/${environment}" init -backend=false -lockfile=readonly -input=false
+            terraform -chdir="infrastructure/${environment}" validate
+          done
+
+      # No backend and no credentials: the tests mock the provider and supply
+      # the platform contracts.
+      - name: Module Tests
+        working-directory: modules/tools-fleet
+        run: |
+          terraform init -backend=false
+          terraform test

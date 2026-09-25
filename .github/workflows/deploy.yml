@@ -1,0 +1,52 @@
+name: Deploy
+
+# Applies the team tools on merge: development, then staging, then production,
+# each under its GitHub Environment (reviewers, main only) and each after the
+# one before succeeds. Each plans first and applies that plan.
+#
+# A running tools server keeps its old configuration until its next start
+# (they are replaced at every start); the Start tools workflow starts one now.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "infrastructure/**"
+      - "modules/**"
+      - "tools/**"
+      - ".terraform-version"
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: team-tools-deploy
+  cancel-in-progress: false
+
+jobs:
+
+  development:
+    name: Deploy (development)
+    uses: ./.github/workflows/deploy-environment.yml
+    with:
+      environment: development
+    secrets: inherit
+
+  staging:
+    name: Deploy (staging)
+    needs: development
+    uses: ./.github/workflows/deploy-environment.yml
+    with:
+      environment: staging
+    secrets: inherit
+
+  production:
+    name: Deploy (production)
+    needs: staging
+    uses: ./.github/workflows/deploy-environment.yml
+    with:
+      environment: production
+    secrets: inherit

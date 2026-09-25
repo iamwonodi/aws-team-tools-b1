@@ -1,0 +1,65 @@
+name: Deploy Environment
+
+# One environment's deploy, called by deploy.yml.
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        type: string
+        required: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+
+  deploy:
+    name: Apply
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Refuse Placeholders
+        run: bash scripts/ci/check-placeholders.sh "infrastructure/${{ inputs.environment }}"
+
+      - name: Read Terraform Version
+        run: echo "TF_VERSION=$(tr -d '[:space:]' < .terraform-version)" >> "${GITHUB_ENV}"
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ secrets.TF_AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Terraform Init
+        run: terraform -chdir="infrastructure/${{ inputs.environment }}" init -input=false -lockfile=readonly
+
+      - name: Terraform Plan
+        run: terraform -chdir="infrastructure/${{ inputs.environment }}" plan -input=false -out=tfplan
+
+      - name: Terraform Apply
+        run: terraform -chdir="infrastructure/${{ inputs.environment }}" apply -input=false tfplan
+
+      - name: Summary
+        run: |
+          {
+            echo "### Team tools, ${{ inputs.environment }}"
+            echo
+            echo "Schedule: $(terraform -chdir='infrastructure/${{ inputs.environment }}' output -raw schedule) (Lagos time)"
+            echo
+            echo 'Addresses:'
+            echo '```json'
+            terraform -chdir="infrastructure/${{ inputs.environment }}" output -json addresses
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"

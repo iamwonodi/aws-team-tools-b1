@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Stands in for the AWS CLI: records each call, one per line, in $FAKE_AWS_LOG.
+echo "aws $*" >> "${FAKE_AWS_LOG:?}"

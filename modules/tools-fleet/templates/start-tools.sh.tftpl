@@ -1,0 +1,55 @@
+#!/bin/bash
+# ==============================================================================
+# START THE TEAM TOOLS (user data; rendered by the tools-fleet module)
+#
+# The server is disposable: every start writes the same files from this script
+# and runs DbGate (port 3000) and CloudBeaver (port 8978) with Docker Compose.
+# Everything is logged to /var/log/team-tools-start.log.
+# ==============================================================================
+set -euo pipefail
+exec > >(tee -a /var/log/team-tools-start.log) 2>&1
+
+W=/opt/team-tools
+mkdir -p "$W/certs" "$W/cloudbeaver"
+cd "$W"
+
+echo "Writing the tools' configuration."
+echo "${compose_b64}" | base64 -d > docker-compose.yaml
+echo "${dbgate_env_b64}" | base64 -d > dbgate.env
+echo "${data_sources_b64}" | base64 -d > cloudbeaver/data-sources.json
+
+# CloudBeaver configures itself with an administrator on first start; without
+# one, its setup page would make the first visitor the administrator. Nobody
+# needs it day to day (the connections are prepared), so the password is random
+# and readable by root on this server only (read it through Session Manager).
+umask 077
+ADMIN_PASSWORD="$(head -c 48 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 32)"
+printf 'CB_SERVER_NAME=%s\nCB_ADMIN_NAME=admin\nCB_ADMIN_PASSWORD=%s\n' "${server_name}" "$ADMIN_PASSWORD" > cloudbeaver.env
+printf '%s\n' "$ADMIN_PASSWORD" > /root/cloudbeaver-admin-password
+ADMIN_PASSWORD=""
+umask 022
+
+%{ if uses_tls ~}
+# The managed databases' certificates are checked against AWS's RDS bundle. It is
+# public, and refused unless it is exactly the bundle this repository pinned.
+echo "Fetching the RDS certificate bundle."
+curl -fsSL --retry 5 --retry-delay 3 -o certs/rds-global-bundle.pem \
+  https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+echo "${rds_bundle_sha256}  certs/rds-global-bundle.pem" | sha256sum -c -
+
+%{ if tls_mysql ~}
+# MySQL's Java driver (CloudBeaver) reads certificates from a keystore, not a
+# PEM file: import each certificate, with the keytool in CloudBeaver's image.
+echo "Building the RDS truststore for CloudBeaver's MySQL connection."
+mkdir -p certs/split
+awk '/BEGIN CERTIFICATE/ { n++ } n { print > sprintf("certs/split/%03d.pem", n) }' certs/rds-global-bundle.pem
+docker run --rm --entrypoint sh -v "$W/certs:/c" "${cloudbeaver_image}" -c \
+  'for f in /c/split/*.pem; do keytool -importcert -noprompt -storetype PKCS12 -keystore /c/rds-truststore.p12 -storepass "$1" -alias "$(basename "$f" .pem)" -file "$f" > /dev/null; done' \
+  _ "${truststore_password}"
+rm -rf certs/split
+%{ endif ~}
+%{ endif ~}
+
+echo "Starting DbGate and CloudBeaver."
+docker compose up -d
+echo "The team tools are starting."

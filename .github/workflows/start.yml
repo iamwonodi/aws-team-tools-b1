@@ -1,0 +1,44 @@
+name: Start tools
+
+# Starts the team tools now, outside their schedule, and switches them off two
+# hours later (unless the schedule takes over first). Run it from the Actions
+# tab: it runs under the chosen GitHub Environment, so the same reviewers as a
+# deploy approve it.
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment
+        type: choice
+        options: [development, staging, production]
+        required: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+
+  start:
+    name: Start (${{ inputs.environment }})
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Read Project
+        run: |
+          PROJECT_NAME="$(sed -n 's/^[[:space:]]*project_name[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "infrastructure/${{ inputs.environment }}/terraform.tfvars")"
+          echo "PROJECT_NAME=${PROJECT_NAME}" >> "${GITHUB_ENV}"
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ secrets.TF_AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Start
+        run: bash scripts/ci/start-tools.sh "${{ inputs.environment }}" "${PROJECT_NAME}" "${{ vars.AWS_REGION }}" | tee -a "${GITHUB_STEP_SUMMARY}"
