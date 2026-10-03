@@ -234,7 +234,12 @@ Done. Next:
   2. Once core has applied them, connect this repository to its roles:
        scripts/fetch-role-arn.sh --core OWNER/CORE-REPOSITORY
 
-  3. Generate and commit each environment's .terraform.lock.hcl if the provider
-     changed (docs/first-setup.md), commit these changes and open a pull request.
+  3. Generate each environment's .terraform.lock.hcl for every platform (CI
+     refuses one with fewer than four h1: hashes per provider, which is what a
+     plain 'terraform init' on one machine writes), then commit it:
+$(for e in "${ENVIRONMENTS[@]}"; do echo "       terraform -chdir=infrastructure/${e} init -backend=false && terraform -chdir=infrastructure/${e} providers lock -platform=windows_amd64 -platform=linux_amd64 -platform=darwin_amd64 -platform=darwin_arm64"; done)
+
+  4. Commit these changes and open a pull request (docs/first-setup.md).
+
 
 NEXT

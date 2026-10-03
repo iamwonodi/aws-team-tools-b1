@@ -29,6 +29,7 @@ for e in development staging production; do
 done
 check "AWS_REGION is set on all six environments"          bash -c "[ \$(grep -c 'variable set AWS_REGION --repo acme/team-tools' '${FAKE_GH_LOG}') -eq 6 ]"
 check "core's tfvars lines are printed with the IDs"       bash -c "grep -q 'team_tools_repository          = \"acme/team-tools\"' '${WORK}/out.txt' && grep -q 'owner_id = \"123\"' '${WORK}/out.txt' && grep -q 'repository_id       = \"987\"' '${WORK}/out.txt'"
+check "the all-platform lock command is printed per environment" bash -c "[ \$(grep -c 'terraform -chdir=infrastructure/[a-z]* init -backend=false && terraform -chdir=infrastructure/[a-z]* providers lock -platform=windows_amd64 -platform=linux_amd64 -platform=darwin_amd64 -platform=darwin_arm64' '${WORK}/out.txt') -eq 3 ]"
 fresh; run >/dev/null 2>&1; run > "${WORK}/out2.txt" 2>&1
 check "re-running is safe"                                 bash -c "[ \$? -eq 0 ] && grep -qx 'project_name = \"acme\"' '$I/staging/terraform.tfvars'"
 check "no reviewers is warned about"                       grep -q 'WARNING: no --reviewers' "${WORK}/out2.txt"

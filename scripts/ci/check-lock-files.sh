@@ -11,7 +11,11 @@ set -euo pipefail
 #
 # For each directory given, this fails unless:
 #   - .terraform.lock.hcl is tracked by git, and
-#   - it lists every provider the directory's own required_providers declares.
+#   - it lists every provider the directory's own required_providers declares, and
+#   - every provider in it has at least MIN_H1 "h1:" hashes, one per locked
+#     platform. A plain `terraform init` records only the machine's own platform,
+#     which passes locally and fails `terraform init -lockfile=readonly` or
+#     `terraform validate` in CI on Linux.
 #
 # Providers that only child modules declare are checked by Terraform itself: the
 # workflows run `terraform init -lockfile=readonly`, which refuses a lock file
@@ -23,6 +27,7 @@ set -euo pipefail
 [[ $# -gt 0 ]] || { echo "Usage: check-lock-files.sh <root-dir>..." >&2; exit 1; }
 
 LOCK_COMMAND='terraform providers lock -platform=windows_amd64 -platform=linux_amd64 -platform=darwin_amd64 -platform=darwin_arm64'
+MIN_H1=4
 FAILED=0
 
 for DIR in "$@"; do
@@ -53,6 +58,22 @@ for DIR in "$@"; do
 
   if [[ ${#MISSING[@]} -gt 0 ]]; then
     echo "::error file=${LOCK}::${LOCK} does not lock ${MISSING[*]}. Run 'terraform -chdir=${DIR} init -upgrade', then '${LOCK_COMMAND}' there, and commit it."
+    FAILED=1
+    continue
+  fi
+
+  # "h1:" hashes per provider block: one per platform locked.
+  THIN=()
+  while read -r NAME COUNT; do
+    [[ "${COUNT}" -ge "${MIN_H1}" ]] || THIN+=("${NAME} has ${COUNT}")
+  done < <(awk '
+    /^provider "/ { name = $2; gsub(/"/, "", name); sub(/^registry\.terraform\.io\//, "", name); count = 0; inside = 1; next }
+    inside && /"h1:/ { count++ }
+    inside && /^}/ { print name, count; inside = 0 }
+  ' "${LOCK}")
+
+  if [[ ${#THIN[@]} -gt 0 ]]; then
+    echo "::error file=${LOCK}::${LOCK} must carry at least ${MIN_H1} h1: hashes per provider (one per platform), but ${THIN[*]}. Run '${LOCK_COMMAND}' in ${DIR}, and commit it."
     FAILED=1
     continue
   fi
